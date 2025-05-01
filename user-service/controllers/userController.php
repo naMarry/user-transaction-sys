@@ -1,0 +1,224 @@
+<?php
+
+include_once(__DIR__ . '/../models/user.php');
+
+use Dotenv\Dotenv;
+use Firebase\JWT\Key;
+
+$dotenv = Dotenv::createImmutable(__DIR__ . '/../');
+$dotenv->safeLoad();
+
+class UserController extends User
+{
+
+    private $userModel;
+    private $data;
+
+    public function __construct()
+    {
+        $this->userModel = new User();
+
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (strpos($contentType, 'application/json') !== false) {
+            //json
+            $this->data = json_decode(file_get_contents('php://input'), true);
+        } else {
+            // formdata
+            $this->data = $_POST;
+        }
+    }
+
+    public function generateAdmin()
+    {
+        $username = $this->data['username'] ?? '';
+        $password = $this->data['password'] ?? '';
+
+        if (empty($username) || empty($password)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Username and password are required']);
+            return;
+        }
+
+        $create = $this->userModel->createAdmin($username, $password);
+        if ($create) {
+            echo json_encode(['success' => true, 'message' => 'Admin created successfully']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Unable to create admin']);
+        }
+    }
+
+    public function generateUser()
+    {
+        $userData = $this->verifyAdminPermission();
+
+        if ($userData->role !== 1) {
+            http_response_code(403);
+            echo json_encode(['status' => 'error', 'message' => 'Only admins can create users']);
+            exit;
+        }
+
+        $username = $this->data['username'] ?? '';
+        $password = $this->data['password'] ?? '';
+        $balance = $this->data['balance'] ?? '';
+
+        if (empty($username) || empty($password) || empty($balance)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Username and password and balance are required']);
+            return;
+        }
+
+        $create = $this->userModel->createUser($username, $password, $balance);
+        if ($create) {
+            echo json_encode(['success' => true, 'message' => 'User created successfully']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Unable to create new user']);
+        }
+    }
+
+    public function retreiveUser($id)
+    {
+        $userData = $this->verifyAdminPermission();
+
+        if ($userData->role !== 1) {
+            http_response_code(403);
+            echo json_encode(['status' => 'error', 'message' => 'Only admins can create users']);
+            exit;
+        }
+
+        $user = $this->userModel->getUserById($id);
+        if ($user) {
+            echo json_encode(['success' => true, 'message' => 'User retrieve successfully', 'user' => $user]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'No user found', 'user' => []]);
+        }
+    }
+
+    public function getBalance($id)
+    {
+        // $userData = $this->verifyAdminPermission();
+
+        // if ($userData->role !== 1) {
+        //     http_response_code(403);
+        //     echo json_encode(['status' => 'error', 'message' => 'Only admins can create users']);
+        //     exit;
+        // }
+
+        $user = $this->userModel->getUserById($id);
+        $balance = $user['balance'];
+
+        if ($user) {
+            echo json_encode(['success' => true, 'message' => 'Balance retrieve successfully', 'balance' => $balance]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'No user found', 'balance' => []]);
+        }
+    }
+
+    public function updateBalance($id)
+    {
+        // $userData = $this->verifyAdminPermission();
+
+        // if ($userData->role !== 1) {
+        //     http_response_code(403);
+        //     echo json_encode(['status' => 'error', 'message' => 'Only admins can create users']);
+        //     exit;
+        // }
+
+        $balance = $this->data['balance'] ?? '';
+        if ($balance === null) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Balance is required']);
+            return;
+        }
+
+        $update = $this->userModel->updateBalanceById($balance, $id);
+
+        if ($update) {
+            echo json_encode(['success' => true, 'message' => 'Balance update successfully']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Unable to update balance', 'balance' => []]);
+        }
+    }
+
+    public function verifyAdminPermission()
+    {
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_COOKIE['access_token'] ?? null;
+
+        if (!$authHeader) {
+            return json_encode(["status" => "error", "message" => "Unauthorized user"]);
+        } else {
+            $token = str_replace('Bearer ', '', $authHeader);
+            $key = $_ENV['SECRET_KEY'] ?? $_SERVER['SECRET_KEY'] ?? false;
+
+            try {
+                $decoded = Firebase\JWT\JWT::decode($token, new Key($key, 'HS256'));
+                $user = $decoded->user;
+                return $user;
+            } catch (Exception $e) {
+                return json_encode(["success" => false, "message" => "Invalid token"]);
+            }
+        }
+    }
+
+    public function generateToken($userData)
+    {
+        $key = $_ENV['SECRET_KEY'] ?? $_SERVER['SECRET_KEY'] ?? false;
+
+        if (!$key) {
+            echo json_encode(['success' => 'error', 'message' => 'JWT secret key is missing!']);
+            return;
+        }
+
+        $accessTokenPayload = [
+            "iss" => "localhost",
+            "aud" => "localhost",
+            "iat" => time(),
+            "exp" => time() + 259200, //three days
+            "user" => $userData
+        ];
+
+        $accessToken = Firebase\JWT\JWT::encode($accessTokenPayload, $key, 'HS256');
+        setcookie("access_token", $accessToken, time() + (7 * 24 * 60 * 60), "/", "localhost", true, true);
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Login successful',
+            'access_token' => $accessToken
+        ]);
+    }
+
+    public function login()
+    {
+        $username = $this->data['username'] ?? null;
+        $password = $this->data['password'] ?? null;
+
+        $getUsername = $this->userModel->getAdminByUsername($username);
+
+        if ($getUsername > 0) {
+
+            $user = $this->userModel->getAdminByUsername($username);
+            $userPassword = $user['password'];
+
+            if (password_verify($password, $userPassword)) {
+                // //get user
+                $user = $this->userModel->getAdminByUsername($username);
+                $userData = [
+                    'id' => $user['id'],
+                    'username' => $user['username'],
+                    'role' => $user['role']
+                ];
+
+                $this->generateToken($userData);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Wrong password!']);
+            }
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Can not find email!']);
+        }
+    }
+
+    public function logout()
+    {
+        setcookie("access_token", "", time() - 259200, "/", "localhost", true, false);
+        return json_encode(['success' => true, 'message' => 'Logout sucessfully']);
+    }
+}

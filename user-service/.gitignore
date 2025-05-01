@@ -1,0 +1,28 @@
+# Composer dependencies
+/vendor/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+storage/logs/
+*.pid
+
+# PHPUnit
+.phpunit.result.cache
+junit.xml
+
+# Coverage reports
+coverage/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE/project files
+.vscode/
+.idea/
+*.sw?
+
+
