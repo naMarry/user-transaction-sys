@@ -30,6 +30,15 @@ class UserController extends User
 
     public function generateAdmin()
     {
+        $userData = $this->checkAuthorization();
+        $decoded = json_decode($userData);
+
+        if (!$decoded->success || $decoded->user->role != 1) {
+            http_response_code(403);
+            echo json_encode(['status' => 'error', 'message' => 'Only admins can create admin']);
+            exit;
+        }
+
         $username = $this->data['username'] ?? '';
         $password = $this->data['password'] ?? '';
 
@@ -49,9 +58,10 @@ class UserController extends User
 
     public function generateUser()
     {
-        $userData = $this->verifyAdminPermission();
+        $userData = $this->checkAuthorization();
+        $decoded = json_decode($userData);
 
-        if ($userData->role !== 1) {
+        if (!$decoded->success || $decoded->user->role != 1) {
             http_response_code(403);
             echo json_encode(['status' => 'error', 'message' => 'Only admins can create users']);
             exit;
@@ -77,9 +87,10 @@ class UserController extends User
 
     public function retreiveUser($id)
     {
-        $userData = $this->verifyAdminPermission();
+        $userData = $this->checkAuthorization();
+        $decoded = json_decode($userData);
 
-        if ($userData->role !== 1) {
+        if (!$decoded->success || $decoded->user->role != 1) {
             http_response_code(403);
             echo json_encode(['status' => 'error', 'message' => 'Only admins can create users']);
             exit;
@@ -95,13 +106,20 @@ class UserController extends User
 
     public function getBalance($id)
     {
-        // $userData = $this->verifyAdminPermission();
+        // $userData = $this->checkAuthorization();
+        // $decoded = json_decode($userData);
 
-        // if ($userData->role !== 1) {
+        // if (!$decoded->success) {
         //     http_response_code(403);
-        //     echo json_encode(['status' => 'error', 'message' => 'Only admins can create users']);
+        //     echo json_encode(['status' => 'error', 'message' => 'Unauthorize user']);
         //     exit;
         // }
+        $userData = json_decode($this->checkAuthorization(), true);
+        if (!$userData['success']) {
+            http_response_code(403);
+            echo json_encode(['status' => 'error', 'message' => 'Unauthorized user']);
+            exit;
+        }
 
         $user = $this->userModel->getUserById($id);
         $balance = $user['balance'];
@@ -113,35 +131,70 @@ class UserController extends User
         }
     }
 
-    public function updateBalance($id)
+    public function depositBalance($id)
     {
-        // $userData = $this->verifyAdminPermission();
+        $userData = json_decode($this->checkAuthorization(), true);
+        // var_dump($userData);
 
-        // if ($userData->role !== 1) {
-        //     http_response_code(403);
-        //     echo json_encode(['status' => 'error', 'message' => 'Only admins can create users']);
-        //     exit;
-        // }
+        if (!$userData['success']) {
+            http_response_code(403);
+            echo json_encode(['status' => 'error', 'message' => 'Unauthorized user']);
+            exit;
+        }
 
-        $balance = $this->data['balance'] ?? '';
-        if ($balance === null) {
+        $user = $this->userModel->getUserById($id);
+        $balance = $user['balance'];
+
+        $amount = $this->data['amount'] ?? '';
+        $balance += $amount;
+
+        if (empty($balance) || empty($amount)) {
             http_response_code(400);
-            echo json_encode(['success' => false, 'message' => 'Balance is required']);
+            echo json_encode(['success' => false, 'message' => 'Balance and amount are required']);
             return;
         }
 
         $update = $this->userModel->updateBalanceById($balance, $id);
-
         if ($update) {
-            echo json_encode(['success' => true, 'message' => 'Balance update successfully']);
+            echo json_encode(['success' => true, 'message' => 'Deposit successfully']);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Unable to update balance', 'balance' => []]);
+            echo json_encode(['success' => false, 'message' => 'Unable to deposit balance', 'balance' => []]);
         }
     }
 
-    public function verifyAdminPermission()
+    public function withdrawBalance($id)
     {
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_COOKIE['access_token'] ?? null;
+        $userData = json_decode($this->checkAuthorization(), true);
+        if (!$userData['success']) {
+            http_response_code(403);
+            echo json_encode(['status' => 'error', 'message' => 'Unauthorized user']);
+            exit;
+        }
+
+        $user = $this->userModel->getUserById($id);
+        $balance = $user['balance'];
+
+        $amount = $this->data['amount'] ?? '';
+        $balance -= $amount;
+
+        if (empty($balance) || empty($amount)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Balance and amount are required']);
+            return;
+        }
+
+        $update = $this->userModel->updateBalanceById($balance, $id);
+        if ($update) {
+            echo json_encode(['success' => true, 'message' => 'Withdraw successfully']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Unable to withdraw balance', 'balance' => []]);
+        }
+    }
+
+    public function checkAuthorization()
+    {
+        // $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_COOKIE['access_token'] ?? null;
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
 
         if (!$authHeader) {
             return json_encode(["status" => "error", "message" => "Unauthorized user"]);
@@ -151,10 +204,36 @@ class UserController extends User
 
             try {
                 $decoded = Firebase\JWT\JWT::decode($token, new Key($key, 'HS256'));
-                $user = $decoded->user;
-                return $user;
+                return json_encode(['success' => true, 'message' => 'Token valid', 'user' => $decoded->user]);
             } catch (Exception $e) {
                 return json_encode(["success" => false, "message" => "Invalid token"]);
+            }
+        }
+    }
+
+    public function getAuthorizationUser()
+    {
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
+
+        if (!$authHeader) {
+            echo json_encode(["status" => "error", "message" => "Unauthorized user"]);
+        } else {
+            $token = str_replace('Bearer ', '', $authHeader);
+            $key = $_ENV['SECRET_KEY'] ?? $_SERVER['SECRET_KEY'] ?? false;
+
+            try {
+                $decoded = Firebase\JWT\JWT::decode($token, new Key($key, 'HS256'));
+                $id = $decoded->user->id;
+
+                if ($id) {
+                    echo json_encode(['success' => true, 'id' => $id]);
+                    exit;
+                } else {
+                    echo json_encode(['success' => false, 'id' => []]);
+                    exit;
+                }
+            } catch (Exception $e) {
+                echo json_encode(["success" => false, "message" => "Invalid token"]);
             }
         }
     }

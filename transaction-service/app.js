@@ -1,5 +1,6 @@
 const express = require('express')
 const cors = require('cors')
+const cookieParser = require('cookie-parser');
 const app = express()
 require('dotenv').config()
 
@@ -9,6 +10,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
+app.use(cookieParser());
 
 //db connection
 const connectDB = require('./config/db');

@@ -5,7 +5,6 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type");
 header("Access-Control-Allow-Methods: PUT, POST, GET, DELETE, OPTIONS");
 
-
 require './vendor/autoload.php';
 require_once __DIR__ . '/controllers/userController.php';
 
@@ -32,9 +31,15 @@ if ($route == '/' && $method === 'GET') {
 } elseif (preg_match('/^\/api\/get-balance\/(\d+)$/', $route, $matches) && $method === 'GET') {
     $controller = new UserController();
     $controller->getBalance($matches[1]);  
-} elseif (preg_match('/^\/api\/update-balance\/(\d+)$/', $route, $matches) && $method === 'PUT') {
+} elseif (preg_match('/^\/api\/deposit-balance\/(\d+)$/', $route, $matches) && $method === 'POST') {
     $controller = new UserController();
-    $controller->updateBalance($matches[1]);  
+    $controller->depositBalance($matches[1]);  
+} elseif (preg_match('/^\/api\/withdraw-balance\/(\d+)$/', $route, $matches) && $method === 'POST') {
+    $controller = new UserController();
+    $controller->withdrawBalance($matches[1]);  
+} elseif ($route == '/api/check-login-user' && $method === 'GET') {
+    $controller = new UserController();
+    $controller->getAuthorizationUser();  
 } else {
     http_response_code(404);
     echo json_encode(['message' => 'Route not found']);
