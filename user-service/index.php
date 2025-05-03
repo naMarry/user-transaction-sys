@@ -25,6 +25,9 @@ if ($route == '/' && $method === 'GET') {
 } elseif ($route == '/api/login' && $method === 'POST') {
     $controller = new UserController();
     $controller->login();
+} elseif ($route == '/api/logout' && $method === 'POST') {
+    $controller = new UserController();
+    $controller->logout();
 } elseif (preg_match('/^\/api\/get-user\/(\d+)$/', $route, $matches) && $method === 'GET') {
     $controller = new UserController();
     $controller->retreiveUser($matches[1]);  

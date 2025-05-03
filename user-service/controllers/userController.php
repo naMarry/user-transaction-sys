@@ -28,14 +28,17 @@ class UserController extends User
         }
     }
 
+    // admin access 
     public function generateAdmin()
     {
-        $userData = $this->checkAuthorization();
+        $authHeader = $_COOKIE['access_token'] ?? null;
+
+        $userData = $this->checkAuthorization($authHeader);
         $decoded = json_decode($userData);
 
         if (!$decoded->success || $decoded->user->role != 1) {
             http_response_code(403);
-            echo json_encode(['status' => 'error', 'message' => 'Only admins can create admin']);
+            echo json_encode(['success' => false, 'message' => 'Unauthorize! Only admins can create admin']);
             exit;
         }
 
@@ -45,6 +48,13 @@ class UserController extends User
         if (empty($username) || empty($password)) {
             http_response_code(400);
             echo json_encode(['success' => false, 'message' => 'Username and password are required']);
+            return;
+        }
+
+        $verifyExitUsername = $this->userModel->getAdminByUsername($username);
+        if (!empty($verifyExitUsername)) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Username already exited']);
             return;
         }
 
@@ -58,12 +68,14 @@ class UserController extends User
 
     public function generateUser()
     {
-        $userData = $this->checkAuthorization();
+        $authHeader = $_COOKIE['access_token'] ?? null;
+
+        $userData = $this->checkAuthorization($authHeader);
         $decoded = json_decode($userData);
 
         if (!$decoded->success || $decoded->user->role != 1) {
             http_response_code(403);
-            echo json_encode(['status' => 'error', 'message' => 'Only admins can create users']);
+            echo json_encode(['success' => false, 'message' => 'Unauthorize! Only admins can create users']);
             exit;
         }
 
@@ -87,12 +99,14 @@ class UserController extends User
 
     public function retreiveUser($id)
     {
-        $userData = $this->checkAuthorization();
+        $authHeader = $_COOKIE['access_token'] ?? null;
+
+        $userData = $this->checkAuthorization($authHeader);
         $decoded = json_decode($userData);
 
         if (!$decoded->success || $decoded->user->role != 1) {
             http_response_code(403);
-            echo json_encode(['status' => 'error', 'message' => 'Only admins can create users']);
+            echo json_encode(['success' => false, 'message' => 'Unauthoriz! Only admins can view all users']);
             exit;
         }
 
@@ -104,41 +118,42 @@ class UserController extends User
         }
     }
 
+    // user access 
     public function getBalance($id)
     {
-        // $userData = $this->checkAuthorization();
-        // $decoded = json_decode($userData);
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
 
-        // if (!$decoded->success) {
-        //     http_response_code(403);
-        //     echo json_encode(['status' => 'error', 'message' => 'Unauthorize user']);
-        //     exit;
-        // }
-        $userData = json_decode($this->checkAuthorization(), true);
+        $userData = json_decode($this->checkAuthorization($authHeader), true);
         if (!$userData['success']) {
             http_response_code(403);
-            echo json_encode(['status' => 'error', 'message' => 'Unauthorized user']);
+            echo json_encode(['success' => false, 'message' => 'Unauthorized user']);
             exit;
         }
 
         $user = $this->userModel->getUserById($id);
+        if (empty($user)) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'No user found', 'user' => []]);
+            exit;
+        }
+
         $balance = $user['balance'];
 
         if ($user) {
             echo json_encode(['success' => true, 'message' => 'Balance retrieve successfully', 'balance' => $balance]);
         } else {
-            echo json_encode(['success' => false, 'message' => 'No user found', 'balance' => []]);
+            echo json_encode(['success' => false, 'message' => 'Unable to retreive balance']);
         }
     }
 
     public function depositBalance($id)
     {
-        $userData = json_decode($this->checkAuthorization(), true);
-        // var_dump($userData);
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
 
+        $userData = json_decode($this->checkAuthorization($authHeader), true);
         if (!$userData['success']) {
             http_response_code(403);
-            echo json_encode(['status' => 'error', 'message' => 'Unauthorized user']);
+            echo json_encode(['success' => false, 'message' => 'Unauthorized user']);
             exit;
         }
 
@@ -146,7 +161,6 @@ class UserController extends User
         $balance = $user['balance'];
 
         $amount = $this->data['amount'] ?? '';
-        $balance += $amount;
 
         if (empty($balance) || empty($amount)) {
             http_response_code(400);
@@ -154,9 +168,11 @@ class UserController extends User
             return;
         }
 
+        $balance += $amount;
+
         $update = $this->userModel->updateBalanceById($balance, $id);
         if ($update) {
-            echo json_encode(['success' => true, 'message' => 'Deposit successfully']);
+            echo json_encode(['success' => true, 'message' => 'Deposit successfully', 'balance' => $balance]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Unable to deposit balance', 'balance' => []]);
         }
@@ -164,10 +180,12 @@ class UserController extends User
 
     public function withdrawBalance($id)
     {
-        $userData = json_decode($this->checkAuthorization(), true);
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
+
+        $userData = json_decode($this->checkAuthorization($authHeader), true);
         if (!$userData['success']) {
             http_response_code(403);
-            echo json_encode(['status' => 'error', 'message' => 'Unauthorized user']);
+            echo json_encode(['success' => false, 'message' => 'Unauthorized user']);
             exit;
         }
 
@@ -175,13 +193,20 @@ class UserController extends User
         $balance = $user['balance'];
 
         $amount = $this->data['amount'] ?? '';
-        $balance -= $amount;
 
         if (empty($balance) || empty($amount)) {
             http_response_code(400);
             echo json_encode(['success' => false, 'message' => 'Balance and amount are required']);
             return;
         }
+
+        if ($amount > intval($balance)) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Can not withdraw a larger amount than balance', 'balance' => $balance]);
+            exit;
+        }
+
+        $balance -= $amount;
 
         $update = $this->userModel->updateBalanceById($balance, $id);
         if ($update) {
@@ -191,13 +216,12 @@ class UserController extends User
         }
     }
 
-    public function checkAuthorization()
+    public function checkAuthorization($authHeader)
     {
         // $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_COOKIE['access_token'] ?? null;
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
 
         if (!$authHeader) {
-            return json_encode(["status" => "error", "message" => "Unauthorized user"]);
+            return json_encode(["success" => false, "message" => "Unauthorized user"]);
         } else {
             $token = str_replace('Bearer ', '', $authHeader);
             $key = $_ENV['SECRET_KEY'] ?? $_SERVER['SECRET_KEY'] ?? false;
@@ -216,7 +240,7 @@ class UserController extends User
         $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
 
         if (!$authHeader) {
-            echo json_encode(["status" => "error", "message" => "Unauthorized user"]);
+            echo json_encode(['success' => false, "message" => "Unauthorized user"]);
         } else {
             $token = str_replace('Bearer ', '', $authHeader);
             $key = $_ENV['SECRET_KEY'] ?? $_SERVER['SECRET_KEY'] ?? false;
@@ -298,6 +322,6 @@ class UserController extends User
     public function logout()
     {
         setcookie("access_token", "", time() - 259200, "/", "localhost", true, false);
-        return json_encode(['success' => true, 'message' => 'Logout sucessfully']);
+        echo json_encode(['success' => true, 'message' => 'Logout sucessfully']);
     }
 }
