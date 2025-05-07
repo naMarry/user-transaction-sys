@@ -31,6 +31,9 @@ if ($route == '/' && $method === 'GET') {
 } elseif (preg_match('/^\/api\/get-user\/(\d+)$/', $route, $matches) && $method === 'GET') {
     $controller = new UserController();
     $controller->retreiveUser($matches[1]);  
+} elseif ($route == '/api/get-users' && $method === 'GET') {
+    $controller = new UserController();
+    $controller->getAllUsers();  
 } elseif (preg_match('/^\/api\/get-balance\/(\d+)$/', $route, $matches) && $method === 'GET') {
     $controller = new UserController();
     $controller->getBalance($matches[1]);  

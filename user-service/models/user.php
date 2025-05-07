@@ -72,6 +72,20 @@ class User extends Dbh
         }
     }
 
+    protected function getUsers()
+    {
+        $sql = "SELECT * FROM users ";
+        $stmp = $this->connect()->prepare($sql);
+
+        try {
+            $stmp->execute();
+            $result = $stmp->fetchAll(PDO::FETCH_ASSOC);
+            return $result ? $result : [];
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+
     protected function updateBalanceById($balance, $id)
     {
         $sql = "UPDATE users SET balance = ? WHERE id = ?";

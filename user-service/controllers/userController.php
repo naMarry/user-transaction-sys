@@ -118,6 +118,27 @@ class UserController extends User
         }
     }
 
+    public function getAllUsers()
+    {
+        $authHeader = $_COOKIE['access_token'] ?? null;
+
+        $userData = $this->checkAuthorization($authHeader);
+        $decoded = json_decode($userData);
+
+        if (!$decoded->success || $decoded->user->role != 1) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Unauthoriz! Only admins can view all users']);
+            exit;
+        }
+
+        $users = $this->userModel->getUsers();
+        if ($users) {
+            echo json_encode(['success' => true, 'message' => 'User retrieve successfully', 'user' => $users]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'No user found', 'user' => []]);
+        }
+    }
+
     // user access 
     public function getBalance($id)
     {

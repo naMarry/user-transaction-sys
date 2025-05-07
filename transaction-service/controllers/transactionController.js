@@ -120,9 +120,11 @@ const withdrawBalance = async (req, res) => {
 
 const getHistory = async (req, res) => {
     try {
-        const history = await TransactionDB.find();
-        history ? res.status(201).json({ result: true, message: "Transaction history", history: history })
-            : res.status(403).json({ result: false, message: "Unable to get history" })
+        const { id } = await loginUserId(req)
+
+        const history = await TransactionDB.find({ user_id: id });
+        history.length>0 ? res.status(201).json({ result: true, message: "Transaction history", history: history })
+            : res.status(400).json({ result: false, message: "No transaction history", history: [] })
     } catch (error) {
         console.error('Get history failed:', error.message);
         res.status(500).json({ success: false, message: error.message });
